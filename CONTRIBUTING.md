@@ -14,9 +14,16 @@ The rule dictionary drifts out of date as AI writing habits change, so keeping i
      every non-regex bullet as a literal string, so `"It's not X. It's Y."`
      would only ever match that exact sentence with literal capital X and Y
      in it. See `rules/antipatterns/binary_contrasts.md` for examples. The
-     bullet line splits on `|` with no escaping, so the regex itself must
-     not contain a literal `|` (no alternation groups); rephrase the
-     pattern instead. If the pattern can't be expressed as a regex at all
+     bullet line is still `|`-delimited, so a literal `|` inside the regex
+     (an alternation group) must be written `\|`, not a bare `|`, or it gets
+     read as a field separator instead of part of the pattern: write
+     `"diligenc\w*\s+(?:it\|this\|that\|them)\b"`, not
+     `"diligenc\w*\s+(?:it|this|that|them)\b"`. A literal `\` in the pattern
+     itself (rare) is written `\\` the same way. `scripts/lint.mjs` fails
+     loudly on a pattern that still contains a stray double-quote character,
+     the tell-tale sign of a forgotten `\|`, so a mistake here doesn't ship
+     as a silently corrupted rule. If the pattern can't be expressed as a
+     regex at all
      (it requires comparing the meaning of multiple sentences, like
      restating one point three different ways), it doesn't belong in
      `rules/` as a bullet; propose it as a `/clearfelt-writing rewrite` reasoning

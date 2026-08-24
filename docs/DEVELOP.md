@@ -29,6 +29,10 @@ For a rough sanity check of whether the scoring weights are in the right neighbo
 4. Run it again against a sample that should NOT trigger the rule, to catch overly broad patterns before they ship.
 5. If the rule is significant (a new category, a materially different severity), add or update a case in `tests/fixtures/` and `tests/detect.test.mjs` so the behavior is locked in, not just eyeballed once.
 
+## Testing a routing change
+
+If you touch `SKILL.md`'s Commands table or Routing section, `node scripts/routing-eval.mjs` scores recorded judgment runs against the labeled requests in `tests/fixtures/routing/manifest.json`, the same reasoning-only-signal pattern `scripts/qualitative-eval.mjs` uses: nothing in this repo can judge routing itself (see `docs/decisions/notes/0001-routing-eval-harness.md`), so record a fresh run per `tests/fixtures/routing/runs/README.md` after a real change, don't rely on the two runs already checked in staying representative of the new wording.
+
 ## Testing the hook
 
 ```bash

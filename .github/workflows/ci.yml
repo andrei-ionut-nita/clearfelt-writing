@@ -25,10 +25,16 @@ jobs:
       - name: Lint (frontmatter, XML, rule sources, config drift, em-dash)
         run: node scripts/lint.mjs
 
-      - name: Eval (informational, not gating)
-        run: node scripts/eval.mjs
-        # scripts/eval.mjs always exits 0 by design: a low pass rate is a
-        # real, disclosed finding about detection recall (see
-        # docs/decisions/0010 and 0012), not something CI should hard-fail
-        # a PR over the way a test-suite regression should. Its output
-        # still shows up in the run log either way.
+      - name: Eval (fails only on a real regression, not on every miss)
+        run: node scripts/eval.mjs --min-pass-rate 0.85
+        # A 100% gate isn't realistic: a known, disclosed recall gap (see
+        # docs/decisions/0010 and 0012) is a real finding to investigate, not
+        # something CI should hard-fail a PR over the way a test-suite
+        # regression should. But "eval.mjs can never fail" (its behavior
+        # before this flag existed) meant a real detection-quality
+        # regression, the exact shape docs/decisions/0011 disclosed (a
+        # rescale that made the AI-heavy misses measurably worse and shipped
+        # anyway, since nothing gated on it), could ship silently too. 0.85
+        # sits comfortably below the current 28/28 pass rate so normal work
+        # isn't blocked, but still catches an actual drop instead of only
+        # showing up in a log nobody is required to read.

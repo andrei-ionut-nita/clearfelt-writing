@@ -51,7 +51,7 @@ Everything past this point, voice profiles, domain context, personal calibration
 - **A code-verified preservation guarantee, not just a prompt instruction.** `scripts/check.mjs` deterministically diffs a rewrite candidate against its source: a locked span that changed, or a constraint that's missed, always blocks the write; a dropped or added number, date, proper noun, or quote surfaces as a disclosed warning by default.
 - **See exactly what's active before you run anything.** `/clearfelt-writing explain` prints every resolved config setting and which layer set it (default, shipped, or your global override), plus voice/domain/hook state, in one place.
 - **Voice register, an advisory tone check, never scored.** Set `register: direct` or `register: warm` in a voice profile (default: `neutral`, off) and `/clearfelt-writing audit` flags words that don't match, hedging past the point of a real position, or accusatory language sharper than the voice calls for, as a plain note, never a score deduction. See `docs/decisions/0024-voice-register.md`.
-- **Tested, not just trusted.** `node --test` runs a real regression suite (197 tests) against every script, not just `scripts/detect.mjs`; `node scripts/eval.mjs` checks the score against a labeled corpus and reports the pass rate honestly, including where it currently falls short; `node scripts/lint.mjs` catches repo-consistency drift (stale config defaults, an undocumented rule source, a malformed config row) before it ships.
+- **Tested, not just trusted.** `node --test` runs a real regression suite (197 tests) against every script, not just `scripts/detect.mjs`; `node scripts/eval.mjs` checks the score against a labeled corpus and reports the pass rate honestly, including where it currently falls short; `node scripts/lint.mjs` catches repo-consistency drift (stale config defaults, an undocumented rule source, a malformed config row) before it ships; `node scripts/routing-eval.mjs` scores recorded judgment runs against a labeled set of requests to check how reliably `SKILL.md`'s Routing section dispatches to the right command, the same honest, no-API-call approach `scripts/qualitative-eval.mjs` already uses for the score's reasoning-only signals.
 
 ## Quick start
 
@@ -193,6 +193,7 @@ scripts/calibrate.mjs   computes a writer's own baseline statistical signals fro
 scripts/explain.mjs     prints every resolved config setting and its provenance
 scripts/eval.mjs        lightweight scoring sanity check against a labeled corpus
 scripts/qualitative-eval.mjs  scores recorded judgment runs on the five qualitative signals
+scripts/routing-eval.mjs      scores recorded judgment runs on SKILL.md's command routing
 scripts/hook.mjs        auto-audit hook admin and runtime body
 scripts/pin.mjs         $clearfelt-writing-<command> shortcut creation
 scripts/lint.mjs        repo-consistency checks, run before any PR
@@ -202,9 +203,9 @@ clearfelt-writing.config.md     every tunable, one Markdown table
 prompts/audit_loop.xml  the 3-pass rewrite pipeline for /clearfelt-writing rewrite
 prompts/write_loop.xml  the interview-then-draft pipeline for /clearfelt-writing write, reusing audit_loop's scoring and preservation passes
 templates/               bundled voice-profile, domain-profile, and constraint-set defaults
-schemas/                 documents the rule-bullet, eval-manifest, and detect/check output JSON shapes
+schemas/                 documents the rule-bullet, eval-manifest, qualitative-manifest, routing-manifest, and detect/check output JSON shapes
 reports/                 gitignored, opt-in saved artifacts (audit/eval/check output)
-tests/                   node --test suite (one file per script) plus fixtures/eval/'s and fixtures/qualitative/'s labeled corpora
+tests/                   node --test suite (one file per script) plus fixtures/eval/'s, fixtures/qualitative/'s, and fixtures/routing/'s labeled corpora
 ```
 
 `prompts/audit_loop.xml` and `prompts/write_loop.xml` are the only two files in this repo that aren't Markdown. They're the literal prompt text fed to Claude to run the rewrite and write loops, not something you're meant to hand-edit day to day, and XML tags are Anthropic's own recommended way to structure a multi-step prompt reliably. `write_loop.xml` reuses `audit_loop.xml`'s scoring and preservation-checking passes rather than duplicating them; the interview and draft-generation steps are the only genuinely new logic. Everything you'd actually customize lives in the Markdown files above them.
@@ -227,4 +228,4 @@ MIT. See [LICENSE](LICENSE).
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md). Current version: 0.7.0.
+See [CHANGELOG.md](CHANGELOG.md). Current version: 0.8.0.

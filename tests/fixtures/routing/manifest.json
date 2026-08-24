@@ -1,0 +1,25 @@
+{
+  "$schema": "../../../schemas/routing-manifest.schema.json",
+  "note": "Labeled fixtures for SKILL.md's Routing section, which command a request maps to. This is a model-judgment call (docs/decisions/0019 chose model-judged routing over a commands/ directory precisely so any agent, not just Claude Code, can dispatch these five commands from plain instructions), so no script in this repo can judge it: scripts/detect.mjs never touches this directory. scripts/routing-eval.mjs scores recorded runs (see runs/README.md for how a run gets recorded) against this manifest and, once two or more runs exist, reports pairwise agreement between them, the same honest-reporting pattern tests/fixtures/qualitative/ already established for a reasoning-only signal.",
+  "fixtures": [
+    { "id": "explicit-audit", "request": "/clearfelt-writing audit path/to/draft.md", "expected": "audit" },
+    { "id": "explicit-rewrite", "request": "/clearfelt-writing rewrite path/to/draft.md", "expected": "rewrite" },
+    { "id": "explicit-write", "request": "/clearfelt-writing write path/to/notes.md", "expected": "write" },
+    { "id": "explicit-explain", "request": "/clearfelt-writing explain", "expected": "explain" },
+    { "id": "explicit-setup", "request": "/clearfelt-writing setup", "expected": "setup" },
+    { "id": "synonym-score-this", "request": "score this file for AI tells", "expected": "audit" },
+    { "id": "synonym-check-slop", "request": "check this doc for AI slop", "expected": "audit" },
+    { "id": "synonym-sounds-ai", "request": "does this paragraph sound like it was written by AI", "expected": "audit" },
+    { "id": "synonym-sound-human", "request": "make this sound human", "expected": "rewrite" },
+    { "id": "synonym-remove-corporate", "request": "remove the corporate jargon from this document", "expected": "rewrite" },
+    { "id": "synonym-not-chatgpt", "request": "rewrite this so it doesn't read like ChatGPT wrote it", "expected": "rewrite" },
+    { "id": "synonym-flesh-out", "request": "flesh this idea out into a post", "expected": "write" },
+    { "id": "synonym-rough-note", "request": "turn this rough note into a full article", "expected": "write" },
+    { "id": "synonym-what-settings", "request": "what settings are currently active", "expected": "explain" },
+    { "id": "synonym-whats-configured", "request": "what's configured for this project right now", "expected": "explain" },
+    { "id": "synonym-set-up-voice", "request": "set up my writing voice for this project", "expected": "setup" },
+    { "id": "bare-invocation", "request": "clearfelt-writing", "expected": "menu" },
+    { "id": "ambiguous-help-writing", "request": "help me with my writing", "expected": "menu" },
+    { "id": "ambiguous-look-at-this", "request": "can you take a look at this doc", "expected": "menu" }
+  ]
+}

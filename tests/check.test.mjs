@@ -3,7 +3,7 @@
 // as tests/detect.test.mjs. Uses only node:test/node:assert, no new
 // dependency, per CLAUDE.md's dependency-free rule.
 
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
@@ -16,6 +16,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 const CHECK = join(ROOT, 'scripts', 'check.mjs');
 const FIXTURES = join(__dirname, 'fixtures', 'check');
+
+// Every hard-fail test below runs check.mjs with cwd: FIXTURES, and
+// check.mjs's own hard-fail path writes a real timestamped file into
+// FIXTURES/reports/ each time (see check.mjs's "Opt-in, nice-to-have"
+// comment). Gitignored, so it never reaches a commit, but with no cleanup
+// it grows by one file per hard-fail test on every `node --test` run;
+// across repeated dev-session runs this once reached 2,525 stray files.
+// Cleaning up once after this file's own tests finish keeps local repo
+// scans (find, grep) from wading through accumulated scratch output.
+after(() => {
+  rmSync(join(FIXTURES, 'reports'), { recursive: true, force: true });
+});
 
 function run(before, after, extraArgs = []) {
   try {

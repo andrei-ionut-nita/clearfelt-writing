@@ -30,6 +30,25 @@ test('--help prints usage and exits zero', () => {
   assert.match(out, /Usage:/);
 });
 
+test('stateMap: always reports all five state locations, in every case, regardless of what exists on disk', () => {
+  const result = run();
+  assert.equal(result.stateMap.length, 5);
+  const locations = result.stateMap.map((entry) => entry.location);
+  assert.deepEqual(locations, [
+    'clearfelt-writing.config.md',
+    '~/.clearfelt-writing/settings.md',
+    '.clearfelt-writing/domain.md',
+    '.clearfelt-writing/voice-profile.md (or .clearfelt-writing/voices/<name>.md)',
+    '.clearfelt-writing/hook-state.md',
+  ]);
+  for (const entry of result.stateMap) {
+    assert.equal(typeof entry.scope, 'string');
+    assert.equal(typeof entry.holds, 'string');
+    assert.equal(typeof entry.precedence, 'string');
+    assert.ok(entry.scope.length > 0 && entry.holds.length > 0 && entry.precedence.length > 0);
+  }
+});
+
 test('no .clearfelt-writing/ at all: reports voice/domain absent, personalCalibration is the not-computed message', () => {
   const result = run();
   assert.equal(result.voice.exists, false);

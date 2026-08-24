@@ -180,6 +180,24 @@ function checkRuleBulletShape() {
         if (![1, 2, 3].includes(entry.tier)) {
           fail('rule-shape', `${rel}: "${entry.pattern}" has tier ${entry.tier}, expected 1, 2, or 3`);
         }
+        // A correctly-parsed pattern never contains a literal double-quote:
+        // the file's own quoting convention only ever uses `"..."` as the
+        // bullet-wrapper syntax, never as pattern content. A stray `"`
+        // surviving into entry.pattern means splitBulletFields()
+        // (scripts/lib/rules.mjs) split on an unescaped `|` inside what was
+        // meant to be one quoted field, the parser's own quote-stripping
+        // regex then failed to match (no matching trailing quote on its own
+        // fragment) and left the leading quote in place. This is exactly
+        // the "forgot to write \| instead of |" mistake CONTRIBUTING.md
+        // warns about: catching it here turns a silent misparse (a corrupted
+        // pattern, and every field after it shifted one column over) into a
+        // loud failure instead.
+        if (entry.pattern && entry.pattern.includes('"')) {
+          fail(
+            'rule-shape',
+            `${rel}: pattern "${entry.pattern}" contains a literal double-quote, a sign an unescaped "|" inside the pattern broke field-splitting. A literal "|" in a regex bullet must be written "\\|", see CONTRIBUTING.md.`,
+          );
+        }
       }
     }
   }
@@ -287,17 +305,24 @@ function checkConfigRowSyntax() {
   }
 }
 
-// ---- check: config defaults drift (three sources of truth for one number) ----
-// clearfelt-writing.config.md's shipped defaults, scripts/lib/config.mjs's
-// CONFIG_DEFAULTS fallback-of-last-resort, and scripts/lib/score.mjs's own
-// inline `config.<key> ?? <literal>` fallbacks are three independent places
-// a default can live. loadConfig() means CONFIG_DEFAULTS only ever fires
-// when a shipped row is missing, so a stale value there can sit unnoticed
-// for a long time (this happened: CONFIG_DEFAULTS still held the
-// pre-docs/decisions/0011 weights for burstiness/vocabulary/repetition
-// after the shipped config and score.mjs were both updated). This check
-// parses all three and fails if any two disagree on a key present in all of
-// them, so that drift can't happen silently again.
+// ---- check: config defaults drift (two sources of truth for one number, and a regression guard for the third) ----
+// clearfelt-writing.config.md's shipped defaults and scripts/lib/config.mjs's
+// CONFIG_DEFAULTS fallback-of-last-resort are the two remaining independent
+// places a default can live; a Markdown file and a JS object have no way to
+// share one literal the way two JS files can, so this pair still needs a
+// runtime comparison. score.mjs's own inline `config.<key> ?? <literal>`
+// fallbacks used to be a third, hand-maintained copy, and did drift once for
+// real (CONFIG_DEFAULTS still held the pre-docs/decisions/0011 weights for
+// burstiness/vocabulary/repetition after the shipped config and score.mjs
+// had both already moved on). score.mjs now imports CONFIG_DEFAULTS and
+// writes `config.<key> ?? CONFIG_DEFAULTS.<key>` instead of restating each
+// number, collapsing that copy into a direct reference, so it can't drift
+// from CONFIG_DEFAULTS again by construction, not just by staying caught.
+// checkScoreReferencesConfigDefaults() below is the regression guard for
+// that: it fails if score.mjs ever grows a hardcoded numeric literal
+// fallback again for one of the keys this collapse fixed, the exact
+// anti-pattern reappearing, and separately fails if a `config.<key> ??
+// CONFIG_DEFAULTS.<otherKey>` mismatched pair ever gets typo'd in.
 function parseConfigTableValues(text, heading) {
   const lines = text.split('\n');
   const start = lines.findIndex((l) => l.trim() === `## ${heading}`);
@@ -312,33 +337,98 @@ function parseConfigTableValues(text, heading) {
   return values;
 }
 
-function parseScoreFallbacks() {
-  const text = readFileSync(join(ROOT, 'scripts', 'lib', 'score.mjs'), 'utf8');
-  const fallbacks = {};
-  for (const m of text.matchAll(/config\.(\w+)\s*\?\?\s*(-?\d+(?:\.\d+)?)/g)) {
-    fallbacks[m[1]] = m[2];
-  }
-  return fallbacks;
-}
-
 function checkConfigDefaultsDrift() {
   const configText = readFileSync(join(ROOT, 'clearfelt-writing.config.md'), 'utf8');
   const shipped = {};
   for (const heading of CONFIG_SECTIONS) Object.assign(shipped, parseConfigTableValues(configText, heading));
-  const scoreFallbacks = parseScoreFallbacks();
 
-  for (const [key, literal] of Object.entries(scoreFallbacks)) {
-    if (key in shipped && String(shipped[key]) !== String(literal)) {
+  for (const [key, value] of Object.entries(CONFIG_DEFAULTS)) {
+    if (key in shipped && String(shipped[key]) !== String(value)) {
       fail(
         'config-defaults-drift',
-        `score.mjs's fallback for "${key}" is ${literal}, but clearfelt-writing.config.md ships ${shipped[key]}. These must agree, a mismatch means score.mjs's own default is stale.`,
+        `scripts/lib/config.mjs's CONFIG_DEFAULTS has "${key}": ${value}, but clearfelt-writing.config.md ships ${shipped[key]}. These must agree, a mismatch means CONFIG_DEFAULTS is stale.`,
       );
     }
-    if (key in CONFIG_DEFAULTS && String(CONFIG_DEFAULTS[key]) !== String(literal)) {
+  }
+}
+
+// The keys score.mjs used to hardcode a literal fallback for, before this
+// collapse. Listed explicitly (not derived from CONFIG_DEFAULTS wholesale)
+// since not every CONFIG_DEFAULTS key is something score.mjs ever reads;
+// this check is specifically about the keys that already drifted once, not
+// every tunable in the file.
+const SCORE_DEFAULT_KEYS = [
+  'deduction_cap',
+  'burstiness_baseline',
+  'burstiness_weight',
+  'vocabulary_diversity_baseline',
+  'vocabulary_diversity_weight',
+  'repetition_weight',
+  'paragraph_variety_baseline',
+  'paragraph_variety_weight',
+  'wall_of_text_sentence_threshold',
+  'wall_of_text_penalty',
+];
+
+function checkScoreReferencesConfigDefaults() {
+  const text = readFileSync(join(ROOT, 'scripts', 'lib', 'score.mjs'), 'utf8');
+
+  if (!/import\s*\{[^}]*\bCONFIG_DEFAULTS\b[^}]*\}\s*from\s*['"]\.\/config\.mjs['"]/.test(text)) {
+    fail('config-defaults-drift', 'scripts/lib/score.mjs no longer imports CONFIG_DEFAULTS from ./config.mjs.');
+    return;
+  }
+
+  for (const key of SCORE_DEFAULT_KEYS) {
+    const literalRegex = new RegExp(`config\\.${key}\\s*\\?\\?\\s*(-?\\d+(?:\\.\\d+)?)`);
+    const literalMatch = text.match(literalRegex);
+    if (literalMatch) {
       fail(
         'config-defaults-drift',
-        `score.mjs's fallback for "${key}" is ${literal}, but scripts/lib/config.mjs's CONFIG_DEFAULTS has ${CONFIG_DEFAULTS[key]}. If clearfelt-writing.config.md's shipped row is ever missing, loadConfig() would silently return the stale CONFIG_DEFAULTS value instead of score.mjs's own fallback.`,
+        `scripts/lib/score.mjs has "config.${key} ?? ${literalMatch[1]}", a hardcoded literal fallback. It should read CONFIG_DEFAULTS.${key} instead, the exact hand-maintained-copy pattern that already drifted once (see this check's own header comment).`,
       );
+      continue;
+    }
+    const referenceRegex = new RegExp(`config\\.${key}\\s*\\?\\?\\s*CONFIG_DEFAULTS\\.(\\w+)`);
+    const referenceMatch = text.match(referenceRegex);
+    if (!referenceMatch) {
+      fail('config-defaults-drift', `scripts/lib/score.mjs no longer has a "config.${key} ?? CONFIG_DEFAULTS.${key}" fallback at all.`);
+    } else if (referenceMatch[1] !== key) {
+      fail(
+        'config-defaults-drift',
+        `scripts/lib/score.mjs has "config.${key} ?? CONFIG_DEFAULTS.${referenceMatch[1]}", a mismatched key on the two sides of the fallback.`,
+      );
+    }
+  }
+}
+
+// ---- check: command table drift (SKILL.md vs README.md) ----
+// SKILL.md's Commands table is what actually governs routing; README.md's
+// Usage table restates the same commands for a human reader in a different
+// column layout (Reference link vs. prose "Does" summary). Two hand-written
+// copies of the same "which commands exist" fact, with nothing previously
+// catching a command added to one table and not the other, the same shape
+// checkConfigDefaultsDrift() above exists to catch for numeric defaults.
+// Compares only which command names appear in each file, not full row
+// content: the columns legitimately differ, so line-for-line equality would
+// be a false-positive machine, not a real drift check.
+function parseCommandNames(text) {
+  const names = new Set();
+  for (const m of text.matchAll(/`\/clearfelt-writing (\w+)/g)) names.add(m[1]);
+  return names;
+}
+
+function checkCommandTableDrift() {
+  const skillCommands = parseCommandNames(readFileSync(join(ROOT, 'SKILL.md'), 'utf8'));
+  const readmeCommands = parseCommandNames(readFileSync(join(ROOT, 'README.md'), 'utf8'));
+
+  for (const cmd of skillCommands) {
+    if (!readmeCommands.has(cmd)) {
+      fail('command-table-drift', `SKILL.md documents "/clearfelt-writing ${cmd}" but README.md never mentions it.`);
+    }
+  }
+  for (const cmd of readmeCommands) {
+    if (!skillCommands.has(cmd)) {
+      fail('command-table-drift', `README.md documents "/clearfelt-writing ${cmd}" but SKILL.md's Commands table doesn't mention it.`);
     }
   }
 }
@@ -414,6 +504,8 @@ checkRuleBulletShape();
 checkConfigDrift();
 checkConfigRowSyntax();
 checkConfigDefaultsDrift();
+checkScoreReferencesConfigDefaults();
+checkCommandTableDrift();
 checkOutputShape();
 
 for (const w of warnings) console.warn(`WARN  ${w}`);

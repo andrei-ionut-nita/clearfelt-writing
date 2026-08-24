@@ -7,13 +7,24 @@
  * about the detector's precision or recall, report it plainly, don't tune
  * the bands until it passes.
  *
- * Usage: node scripts/eval.mjs [--out <file>]
+ * Usage: node scripts/eval.mjs [--out <file>] [--min-pass-rate <fraction>]
  *
  * --out writes the same pass/fail summary as JSON to <file> (default: no
  * file, unchanged behavior). Intended for reports/eval-<date>.json, a
  * gitignored, opt-in location (see CLAUDE.md), so a release checklist can
  * diff eval pass-rate trend across versions instead of only ever seeing the
  * latest run.
+ *
+ * --min-pass-rate exits 1 if the aggregate pass rate falls below it (a
+ * fraction, e.g. 0.85), otherwise exits 0. Omitted, this script never fails
+ * the process regardless of pass rate, same as before this flag existed: a
+ * disclosed recall gap a maintainer is actively investigating shouldn't
+ * block a local run just for existing. CI passes this flag (see
+ * .github/workflows/ci.yml) so a real regression, the eval corpus's pass
+ * rate actually getting worse, fails the build instead of only showing up
+ * in a log nobody is required to read; the floor is set below the current
+ * pass rate on purpose, to catch a real drop, not to demand every fixture
+ * pass before every merge.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -29,6 +40,8 @@ const EVAL_DIR = join(ROOT, 'tests', 'fixtures', 'eval');
 const args = process.argv.slice(2);
 const outIdx = args.indexOf('--out');
 const outFile = outIdx !== -1 ? args[outIdx + 1] : null;
+const gateIdx = args.indexOf('--min-pass-rate');
+const minPassRate = gateIdx !== -1 ? Number(args[gateIdx + 1]) : null;
 
 const manifest = JSON.parse(readFileSync(join(EVAL_DIR, 'manifest.json'), 'utf8'));
 
@@ -74,6 +87,34 @@ for (const [bucket, stat] of [...byBucket.entries()].sort((a, b) => a[0].localeC
   console.log(`  ${bucket.padEnd(14)} ${stat.passed}/${stat.total}`);
 }
 
+// docs/decisions/0025's reopening condition for percentile rescaling
+// (docs/decisions/0011, deferred) is 15+ fixtures per label in every bucket,
+// not just a pooled total, the exact vague-condition-silently-satisfied gap
+// that ADR exists to close. Printed here, every run, so growing the corpus
+// toward that floor is visible in normal use instead of requiring anyone to
+// re-read the ADR to check.
+const PERCENTILE_RESCALING_PER_LABEL_FLOOR = 15;
+let smallestPerLabelBucket = null;
+let smallestPerLabelCount = Infinity;
+{
+  const perLabelCounts = new Map();
+  for (const entry of manifest.fixtures) {
+    const bucket = entry.bucket ?? '(unbucketed)';
+    const key = `${bucket}/${entry.label}`;
+    perLabelCounts.set(key, (perLabelCounts.get(key) ?? 0) + 1);
+  }
+  for (const [key, count] of perLabelCounts) {
+    if (count < smallestPerLabelCount) {
+      smallestPerLabelCount = count;
+      smallestPerLabelBucket = key;
+    }
+  }
+}
+console.log(
+  `\nPercentile-rescaling reopening bar (docs/decisions/0025): ${PERCENTILE_RESCALING_PER_LABEL_FLOOR}+ fixtures per label per bucket. ` +
+    `Smallest today: ${smallestPerLabelBucket} at ${smallestPerLabelCount}.`,
+);
+
 if (outFile) {
   const outPath = join(ROOT, outFile);
   mkdirSync(dirname(outPath), { recursive: true });
@@ -83,4 +124,14 @@ if (outFile) {
     JSON.stringify({ date: new Date().toISOString(), passed, total: manifest.fixtures.length, byBucket: byBucketObj, results }, null, 2),
   );
   console.log(`Wrote summary to ${outFile}`);
+}
+
+if (minPassRate !== null) {
+  const rate = passed / manifest.fixtures.length;
+  if (rate < minPassRate) {
+    console.error(
+      `\nFAIL: pass rate ${(rate * 100).toFixed(1)}% is below the required --min-pass-rate ${(minPassRate * 100).toFixed(1)}%.`,
+    );
+    process.exit(1);
+  }
 }

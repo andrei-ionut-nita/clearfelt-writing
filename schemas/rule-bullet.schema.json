@@ -8,7 +8,7 @@
   "properties": {
     "pattern": {
       "type": "string",
-      "description": "The literal text or (if regex is \"true\") the regular expression to match. May not contain a literal | character; the bullet-line format splits on | with no escaping."
+      "description": "The literal text or (if regex is \"true\") the regular expression to match. A literal | character (an alternation group in a regex pattern) must be written \\| ; the bullet-line format is still |-delimited, so an unescaped | is read as a field separator, not part of the pattern. A literal backslash is written \\\\ the same way. See scripts/lib/rules.mjs's splitBulletFields()."
     },
     "severity": {
       "type": "integer",

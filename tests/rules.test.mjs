@@ -12,7 +12,16 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { acquireLock, releaseLock } from './helpers/global-settings.mjs';
-import { parseBulletLine, parseRuleFile, loadRuleDir, mergeLocal, findHits, loadRules, loadRegisterRules } from '../scripts/lib/rules.mjs';
+import {
+  parseBulletLine,
+  parseRuleFile,
+  loadRuleDir,
+  mergeLocal,
+  findHits,
+  loadRules,
+  loadRegisterRules,
+  splitBulletFields,
+} from '../scripts/lib/rules.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -177,6 +186,48 @@ test('parseBulletLine: a non-bullet line (blank, heading, prose) returns null', 
   assert.equal(parseBulletLine('Just a line of prose, no leading dash.'), null);
 });
 
+// ---- splitBulletFields: | escaping (CONTRIBUTING.md's documented footgun) ----
+
+test('splitBulletFields: an unescaped | always splits, even with none, one, or several fields', () => {
+  assert.deepEqual(splitBulletFields('just one field'), ['just one field']);
+  assert.deepEqual(splitBulletFields('a | b'), ['a ', ' b']);
+  assert.deepEqual(splitBulletFields('a | b | c | d'), ['a ', ' b ', ' c ', ' d']);
+});
+
+test('splitBulletFields: \\| is a literal pipe, unescaped into the field, not a field separator', () => {
+  // splitBulletFields doesn't trim (that's parseBulletLine's job on top of
+  // it), so the space before the real separator survives into the field.
+  assert.deepEqual(splitBulletFields('a\\|b | c'), ['a|b ', ' c']);
+  assert.deepEqual(splitBulletFields('(?:foo\\|bar\\|baz) | regex: true'), ['(?:foo|bar|baz) ', ' regex: true']);
+});
+
+test('splitBulletFields: \\\\ is a literal backslash, and a real separator right after it still splits', () => {
+  assert.deepEqual(splitBulletFields('a\\\\|b'), ['a\\', 'b']);
+});
+
+test('splitBulletFields: every other backslash sequence (\\w, \\s, \\b, \\d) passes through completely unchanged', () => {
+  assert.deepEqual(splitBulletFields('diligenc\\w*\\s+it\\b'), ['diligenc\\w*\\s+it\\b']);
+});
+
+test('parseBulletLine: a regex pattern with an escaped internal alternation parses as one field with a real |, not several corrupted fields', () => {
+  const parsed = parseBulletLine('- "diligenc\\w*\\s+(?:it\\|this\\|that\\|them)\\b" | regex: true | severity: 4 | source: clearfelt-writing-heuristic');
+  assert.equal(parsed.pattern, 'diligenc\\w*\\s+(?:it|this|that|them)\\b');
+  assert.equal(parsed.regex, 'true');
+  assert.equal(parsed.severity, 4);
+  assert.equal(parsed.source, 'clearfelt-writing-heuristic');
+  // The whole point: the reconstructed pattern must itself be a valid regex.
+  assert.doesNotThrow(() => new RegExp(parsed.pattern));
+});
+
+test('parseBulletLine: a FORGOTTEN escape (bare | inside the pattern) corrupts the parse in a detectable way, a literal quote survives into pattern', () => {
+  const parsed = parseBulletLine('- "diligenc\\w*\\s+(?:it|this|that|them)\\b" | regex: true | severity: 4 | source: clearfelt-writing-heuristic');
+  // Documenting the failure mode scripts/lint.mjs's checkRuleBulletShape()
+  // now catches (a stray double-quote in the parsed pattern), not asserting
+  // this is desirable: this is exactly the "silent misparse" CONTRIBUTING.md
+  // now warns against, still possible if a contributor forgets \|.
+  assert.ok(parsed.pattern.includes('"'), 'a forgotten escape should leave a tell-tale stray quote in the parsed pattern');
+});
+
 test('parseRuleFile: a bullet with no explicit severity/tier gets the 5/1 defaults; one with explicit values keeps them', () => {
   const dir = mkdtempSync(join(tmpdir(), 'clearfelt-writing-rules-unit-test-'));
   const filePath = join(dir, 'test_category.md');
@@ -282,18 +333,20 @@ test('corporate_neologisms: "diligences it" (verbed noun + pronoun object) is fl
   }
 });
 
-// ---- rules/antipatterns/corporate_neologisms.md ----
-
-test('corporate_neologisms: "diligences it" (verbed noun + pronoun object) is flagged, but "due diligence document" and "diligence a term sheet" are not', () => {
+// The rule file collapsed four near-duplicate bullets (one per pronoun) into
+// one regex with an escaped internal alternation (\|) once splitBulletFields
+// (below) made that possible; this locks in that all four pronoun forms
+// still fire from the single merged bullet, not just the one the test above
+// happens to cover.
+test('corporate_neologisms: all four pronoun forms (it/this/that/them) fire from the single merged regex bullet', () => {
   const path = writeFixture(
-    'corporate-neologism-test.md',
-    "Nobody diligences it the way they'd diligence a term sheet. This is a due diligence document.\n",
+    'corporate-neologism-pronouns-test.md',
+    'They diligence it. She diligences this. We diligence that. I diligence them.\n',
   );
   try {
-    const result = run('corporate-neologism-test.md');
+    const result = run('corporate-neologism-pronouns-test.md');
     const hits = result.hits.filter((h) => h.category === 'corporate_neologisms');
-    assert.equal(hits.length, 1, 'only the pronoun-object form should be flagged');
-    assert.match(hits[0].snippet, /diligences it/);
+    assert.equal(hits.length, 4, 'each of the four pronoun forms should be its own hit');
   } finally {
     rmSync(path);
   }

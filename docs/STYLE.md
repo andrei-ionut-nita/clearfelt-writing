@@ -45,7 +45,7 @@ A voice profile always wins. If `.clearfelt-writing/voice-profile.md` says you l
 
 ## No fabrication
 
-The rewrite pass never invents a fact, name, date, or citation that wasn't already in the source. Tightening vague language is fine. Inventing a specific to replace vague language is not, even if the result reads better. See [decisions/0004-no-fabrication-and-voice-precedence.md](decisions/0004-no-fabrication-and-voice-precedence.md).
+The rewrite pass never invents a fact, name, date, or citation that wasn't already in the source. Tightening vague language is fine. Inventing a specific to replace vague language is not, even if the result reads better. See [decisions/0004-no-fabrication-and-voice-precedence.md](decisions/0004-no-fabrication-and-voice-precedence.md). `scripts/check.mjs` verifies this after the fact: a locked span always blocks the write on mismatch, but a dropped or added fact is heuristic, regex-based detection that warns by default rather than blocking, see [decisions/0016-preservation-checker.md](decisions/0016-preservation-checker.md).
 
 ## Where this comes from
 

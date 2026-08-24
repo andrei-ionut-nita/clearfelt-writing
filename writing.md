@@ -21,7 +21,7 @@ This file is referenced by the scoring and rewrite pipeline (`SKILL.md`, `prompt
 
 ## What clearfelt-writing preserves
 
-- **Meaning and facts, always.** The no-fabrication rule (`docs/decisions/0004`): a rewrite never introduces a name, date, statistic, or citation absent from the source. Vague language gets tightened, never replaced with an invented specific.
+- **Meaning and facts, always the instruction, verified where verification can be trusted.** The no-fabrication rule (`docs/decisions/0004`): a rewrite is never instructed to introduce a name, date, statistic, or citation absent from the source. Vague language gets tightened, never replaced with an invented specific. `scripts/check.mjs` (`docs/decisions/0016`) verifies this after the fact, and the two guarantees are not the same strength: a locked span is a deterministic, always-blocking check; a dropped or added number, date, proper noun, or quote is regex-based heuristic detection, warns by default, and only blocks the write if a project has explicitly turned on `check.hard_fail_on_dropped_fact`/`check.hard_fail_on_added_fact`. "Always" describes the standard the rewrite instruction is held to, not a claim that every violation of it is automatically caught.
 - **A user's stated voice**, over the shipped rule files, for that project (`docs/decisions/0004`'s voice-profile precedence; see `voice.md`).
 - **Domain-specific terms and target reading level** a project has explicitly declared exempt (`.clearfelt-writing/domain.md`).
 - **Hedges, qualifiers, and attributions in a document marked `risk_tier: sensitive`**, at every intensity tier, including `structural_rework` (`docs/decisions/0010`, enforced directly in `prompts/audit_loop.xml`, not just documented).

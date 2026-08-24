@@ -4,6 +4,19 @@
 // detect.mjs along with rule matching (scripts/lib/rules.mjs) and reporting
 // (scripts/lib/report.mjs).
 
+// computeScore()'s fallbacks below read CONFIG_DEFAULTS directly rather than
+// restating each number as a second literal: those two used to be
+// independently hand-maintained copies of the same value, kept in sync only
+// by scripts/lint.mjs's config-defaults-drift check, and did drift once for
+// real (docs/decisions/0018: CONFIG_DEFAULTS still held pre-0011 weights
+// after this file and clearfelt-writing.config.md had both already moved
+// on). Importing the one constant makes that specific drift structurally
+// impossible instead of only detectable; clearfelt-writing.config.md, the
+// third, human-editable copy, still gets checked against CONFIG_DEFAULTS by
+// that same lint check, since a Markdown file and a JS object have no way to
+// share a single literal the way two JS files can.
+import { CONFIG_DEFAULTS } from './config.mjs';
+
 // ---- statistical signals ----
 
 export function splitSentences(text) {
@@ -227,30 +240,34 @@ export function computeScore(text, hits, config, exemptPhrases = []) {
   // something instead of losing that ability whenever a document is bad
   // enough. The raw, uncapped sum is still reported (deductionRaw) so
   // nothing is silently hidden, only the score-affecting value is capped.
-  const deductionCap = config.deduction_cap ?? 65;
+  const deductionCap = config.deduction_cap ?? CONFIG_DEFAULTS.deduction_cap;
   const deductionApplied = Math.min(deduction, deductionCap);
 
   const { coefficientOfVariation } = burstinessScore(text);
   const burstinessAdjustment =
-    (Math.min(coefficientOfVariation, 1) - (config.burstiness_baseline ?? 0.5)) * (config.burstiness_weight ?? 12);
+    (Math.min(coefficientOfVariation, 1) - (config.burstiness_baseline ?? CONFIG_DEFAULTS.burstiness_baseline)) *
+    (config.burstiness_weight ?? CONFIG_DEFAULTS.burstiness_weight);
 
   const ttr = typeTokenRatio(text);
   const rootTtr = rootTypeTokenRatio(text);
   const mattr = movingAverageTtr(text, 50);
-  const vocabAdjustment = (mattr - (config.vocabulary_diversity_baseline ?? 0.8688)) * (config.vocabulary_diversity_weight ?? 140);
+  const vocabAdjustment =
+    (mattr - (config.vocabulary_diversity_baseline ?? CONFIG_DEFAULTS.vocabulary_diversity_baseline)) *
+    (config.vocabulary_diversity_weight ?? CONFIG_DEFAULTS.vocabulary_diversity_weight);
 
   const repetition = trigramRepetitionRatio(text, exemptPhrases);
-  const repetitionPenalty = repetition * (config.repetition_weight ?? 27) * 10;
+  const repetitionPenalty = repetition * (config.repetition_weight ?? CONFIG_DEFAULTS.repetition_weight) * 10;
 
   const { sentenceCount } = burstinessScore(text);
   const { coefficientOfVariation: paragraphCV, paragraphCount } = paragraphStructureScore(text);
   const paragraphVarietyAdjustment =
     paragraphCount >= 2
-      ? (Math.min(paragraphCV, 1) - (config.paragraph_variety_baseline ?? 0.5)) * (config.paragraph_variety_weight ?? 12)
+      ? (Math.min(paragraphCV, 1) - (config.paragraph_variety_baseline ?? CONFIG_DEFAULTS.paragraph_variety_baseline)) *
+        (config.paragraph_variety_weight ?? CONFIG_DEFAULTS.paragraph_variety_weight)
       : 0;
   const wallOfTextPenalty =
-    paragraphCount <= 1 && sentenceCount >= (config.wall_of_text_sentence_threshold ?? 5)
-      ? config.wall_of_text_penalty ?? 15
+    paragraphCount <= 1 && sentenceCount >= (config.wall_of_text_sentence_threshold ?? CONFIG_DEFAULTS.wall_of_text_sentence_threshold)
+      ? config.wall_of_text_penalty ?? CONFIG_DEFAULTS.wall_of_text_penalty
       : 0;
 
   let score =

@@ -1,0 +1,26 @@
+{
+  "runId": "run-2",
+  "date": "2026-08-24",
+  "judge": "independent Explore subagent, no prior context, given only SKILL.md and the 19 request texts (not the expected labels)",
+  "judgments": {
+    "explicit-audit": "audit",
+    "explicit-rewrite": "rewrite",
+    "explicit-write": "write",
+    "explicit-explain": "explain",
+    "explicit-setup": "setup",
+    "synonym-score-this": "audit",
+    "synonym-check-slop": "audit",
+    "synonym-sounds-ai": "audit",
+    "synonym-sound-human": "rewrite",
+    "synonym-remove-corporate": "rewrite",
+    "synonym-not-chatgpt": "rewrite",
+    "synonym-flesh-out": "write",
+    "synonym-rough-note": "write",
+    "synonym-what-settings": "explain",
+    "synonym-whats-configured": "explain",
+    "synonym-set-up-voice": "setup",
+    "bare-invocation": "menu",
+    "ambiguous-help-writing": "menu",
+    "ambiguous-look-at-this": "menu"
+  }
+}

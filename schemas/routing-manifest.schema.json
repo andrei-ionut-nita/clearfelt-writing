@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clearfelt-writing/schemas/routing-manifest.schema.json",
+  "title": "clearfelt-writing routing manifest",
+  "description": "Documents tests/fixtures/routing/manifest.json's shape, read by scripts/routing-eval.mjs. Same documentation-only role as schemas/qualitative-manifest.schema.json (not a validation engine this repo runs, see CLAUDE.md's dependency-free rule). Covers SKILL.md's Routing section, which command a request maps to, a model-judgment call (docs/decisions/0019), not something any script here can check with a regex.",
+  "type": "object",
+  "required": ["note", "fixtures"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "note": { "type": "string" },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "request", "expected"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "description": "Short stable identifier, e.g. \"explicit-audit\", used as the key in a recorded run's judgments object." },
+          "request": { "type": "string", "description": "The user-facing request text a routing judgment is made against, verbatim." },
+          "expected": {
+            "type": "string",
+            "enum": ["setup", "audit", "rewrite", "write", "explain", "menu"],
+            "description": "\"menu\" means SKILL.md's Routing section should show the Commands table rather than pick one command, either because no argument was given or because the request is genuinely ambiguous."
+          }
+        }
+      }
+    }
+  }
+}

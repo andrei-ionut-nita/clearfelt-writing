@@ -73,6 +73,75 @@ test('movingAverageTtr: over the window size actually slides (does not equal pla
   assert.ok(mattr > 0 && mattr <= 1);
 });
 
+// This signal has been revised three times (whole-document TTR, then Root
+// TTR, then this windowed version, see docs/decisions/0008, 0012, 0017) and
+// every revision was a real regression found on the next out-of-distribution
+// document, not a hypothetical risk. docs/decisions/0025 asks for this kind
+// of check specifically: pin down the one property MATTR is supposed to
+// guarantee (length-invariance past one window, for a fixed underlying
+// vocabulary richness) as an exact, provable assertion, not a fuzzy "looks
+// reasonable" check, so the next length-confound is caught here instead of
+// on a real document again. Round-robin-cycling a fixed pool of vocabSize
+// distinct words is a deterministic way to hold "richness" constant while
+// varying length: any window of vocabSize or more consecutive words from an
+// infinite period-vocabSize cycle contains exactly vocabSize unique words
+// (vocabSize consecutive integers cover every residue mod vocabSize exactly
+// once), so the windowed TTR is exactly vocabSize/windowSize at every window
+// position, for any document length, not just approximately so.
+test('movingAverageTtr: stays exactly constant across document length once the window slides, for a fixed underlying vocabulary richness', () => {
+  const windowSize = 50;
+  const vocabSize = 20; // < windowSize, so every full window contains all vocabSize unique words
+  // Pure lowercase letters only, not "word0"/"word1": typeTokenRatio's and
+  // movingAverageTtr's word regex is \b[a-z']+\b, and there is no \b between
+  // a letter and a digit (both are \w), so a token with a trailing digit
+  // matches zero words, not one, silently. vocabSize stays under 26 so a
+  // single letter per index is always unique.
+  const vocab = Array.from({ length: vocabSize }, (_, i) => String.fromCharCode(97 + i));
+  const expected = vocabSize / windowSize;
+
+  for (const wordCount of [windowSize, windowSize * 2, windowSize * 6, windowSize * 20]) {
+    const text = Array.from({ length: wordCount }, (_, i) => vocab[i % vocabSize]).join(' ');
+    const mattr = movingAverageTtr(text, windowSize);
+    // Every window contributes exactly vocabSize/windowSize by construction
+    // (see the comment above), so the true value is exact; the comparison
+    // tolerates floating-point summation drift from averaging hundreds of
+    // window positions, not any real variance in the underlying signal.
+    assert.ok(
+      Math.abs(mattr - expected) < 1e-9,
+      `at ${wordCount} words (same underlying vocabulary richness throughout), MATTR should stay ${expected} (within floating-point tolerance), got ${mattr}`,
+    );
+  }
+});
+
+// The documented, disclosed flip side of the test above: below one window,
+// movingAverageTtr falls back to plain whole-text TTR (see its own comment),
+// which IS still length-biased, on purpose, not a bug. Locking this in too:
+// a future change that quietly made the fallback length-invariant as well
+// (a plausible-looking "fix") would contradict score.mjs's own comment
+// describing this exact fallback, so it should fail a test, not just ship
+// silently. Same round-robin construction: same vocabSize (same "richness")
+// at two different sub-window lengths should NOT produce the same TTR.
+test('movingAverageTtr: below the window size, the raw-TTR fallback is still length-biased for the same underlying vocabulary richness (the documented residual, not a regression)', () => {
+  const vocabSize = 20;
+  // Pure lowercase letters only, not "word0"/"word1": typeTokenRatio's and
+  // movingAverageTtr's word regex is \b[a-z']+\b, and there is no \b between
+  // a letter and a digit (both are \w), so a token with a trailing digit
+  // matches zero words, not one, silently. vocabSize stays under 26 so a
+  // single letter per index is always unique.
+  const vocab = Array.from({ length: vocabSize }, (_, i) => String.fromCharCode(97 + i));
+  const shortWordCount = 20; // == vocabSize: every word appears once, TTR = 1
+  const longerWordCount = 40; // 2x vocabSize, still <= the 50-word window: every word appears twice, TTR = 0.5
+  const shortText = Array.from({ length: shortWordCount }, (_, i) => vocab[i % vocabSize]).join(' ');
+  const longerText = Array.from({ length: longerWordCount }, (_, i) => vocab[i % vocabSize]).join(' ');
+  assert.ok(shortWordCount <= 50 && longerWordCount <= 50, 'both fixtures must be at or under the window for this test to exercise the fallback');
+
+  const shortMattr = movingAverageTtr(shortText, 50);
+  const longerMattr = movingAverageTtr(longerText, 50);
+  assert.equal(shortMattr, 1, 'a sub-window text with zero repeats has raw TTR 1');
+  assert.equal(longerMattr, 0.5, 'the same vocabulary pool repeated twice over, still sub-window, has raw TTR 0.5');
+  assert.ok(longerMattr < shortMattr, 'same underlying richness, greater sub-window length, lower raw TTR: the documented residual length bias below one window');
+});
+
 // ---- trigramRepetitionRatio ----
 
 test('trigramRepetitionRatio: fewer than 3 words returns 0', () => {

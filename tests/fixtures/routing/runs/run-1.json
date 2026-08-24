@@ -1,0 +1,26 @@
+{
+  "runId": "run-1",
+  "date": "2026-08-24",
+  "judge": "live Claude Code session (same session that authored manifest.json), reading SKILL.md's Routing section fresh",
+  "judgments": {
+    "explicit-audit": "audit",
+    "explicit-rewrite": "rewrite",
+    "explicit-write": "write",
+    "explicit-explain": "explain",
+    "explicit-setup": "setup",
+    "synonym-score-this": "audit",
+    "synonym-check-slop": "audit",
+    "synonym-sounds-ai": "audit",
+    "synonym-sound-human": "rewrite",
+    "synonym-remove-corporate": "rewrite",
+    "synonym-not-chatgpt": "rewrite",
+    "synonym-flesh-out": "write",
+    "synonym-rough-note": "write",
+    "synonym-what-settings": "explain",
+    "synonym-whats-configured": "explain",
+    "synonym-set-up-voice": "setup",
+    "bare-invocation": "menu",
+    "ambiguous-help-writing": "menu",
+    "ambiguous-look-at-this": "menu"
+  }
+}

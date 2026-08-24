@@ -146,6 +146,47 @@ function explainDomain(config) {
   };
 }
 
+// The canonical map of where config/state lives, documented in full in
+// reference/explain.md's "Where state lives" table. Kept here as a plain
+// static list (not derived from voice/domain/config/hook above) so
+// /clearfelt-writing explain's presentation always includes the whole
+// picture, five locations, even for a fresh project where most of them
+// don't exist yet: deriving this from the resolved values above would make
+// an unset location silently disappear from the map instead of showing up
+// as "not present yet."
+const STATE_MAP = [
+  {
+    location: 'clearfelt-writing.config.md',
+    scope: 'skill-level, every project using this install',
+    holds: 'every scoring/behavior tunable, one Markdown table',
+    precedence: 'base layer for every numeric/boolean setting',
+  },
+  {
+    location: '~/.clearfelt-writing/settings.md',
+    scope: 'user-level, every project on this machine',
+    holds: "a user's saved global preference for any clearfelt-writing.config.md key",
+    precedence: 'overrides clearfelt-writing.config.md; overridden by .clearfelt-writing/domain.md for the keys it sets',
+  },
+  {
+    location: '.clearfelt-writing/domain.md',
+    scope: 'project-level, shared by everyone on the project',
+    holds: 'mode, risk_tier, preferred_intensity, preferred_length, target_grade_level_min/max, technical-term exemptions',
+    precedence: 'highest precedence for the fields it sets; falls through to the two layers above otherwise',
+  },
+  {
+    location: '.clearfelt-writing/voice-profile.md (or .clearfelt-writing/voices/<name>.md)',
+    scope: 'project-level, per-writer or per-platform',
+    holds: 'vocabulary preferences, sentence-rhythm notes, register, personal calibration',
+    precedence: 'its own axis: overrides rule matching, not a config value (docs/decisions/0004)',
+  },
+  {
+    location: '.clearfelt-writing/hook-state.md',
+    scope: 'project-level',
+    holds: 'auto-audit hook on/off, ignored rules/files, quiet mode',
+    precedence: 'its own axis, managed only through $clearfelt-writing hooks',
+  },
+];
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
@@ -175,6 +216,7 @@ function main() {
         domain,
         config,
         hook,
+        stateMap: STATE_MAP,
       },
       null,
       2,

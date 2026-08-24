@@ -20,10 +20,40 @@ export function stripExcludedRegions(text) {
 
 // ---- rule file parsing ----
 
+// Splits a bullet's `|`-delimited fields, treating `\|` as a literal pipe
+// (unescaped to `|` in the result, not a field separator) and `\\` as a
+// literal backslash, so a regex bullet's pattern can contain a real
+// alternation group (`(foo\|bar)`) instead of being unable to express one at
+// all (the previous limitation, documented in CONTRIBUTING.md before this
+// function existed). Only these two sequences are special-cased: any other
+// backslash (`\w`, `\s`, `\b`, `\d`, `\.`, ...) passes through completely
+// unchanged, so every existing regex bullet's real escape sequences keep
+// meaning exactly what they meant before.
+export function splitBulletFields(str) {
+  const fields = [];
+  let current = '';
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === '\\' && (str[i + 1] === '|' || str[i + 1] === '\\')) {
+      current += str[i + 1];
+      i++;
+      continue;
+    }
+    if (ch === '|') {
+      fields.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  fields.push(current);
+  return fields;
+}
+
 export function parseBulletLine(line) {
   const m = line.match(/^-\s+(.+)$/);
   if (!m) return null;
-  const parts = m[1].split('|').map((p) => p.trim());
+  const parts = splitBulletFields(m[1]).map((p) => p.trim());
   const rawPattern = parts[0].replace(/^"(.*)"$/, '$1');
   const fields = { pattern: rawPattern };
   for (const part of parts.slice(1)) {
@@ -149,10 +179,10 @@ export function inflectionPattern(word) {
 // Most bullets are literal text (escaped before matching) or single words
 // (given light inflection support below). `regex: true` opts a bullet out
 // of literal-string escaping entirely, for patterns that describe a shape
-// rather than fixed wording ("It's not X. It's Y."). The bullet-line format
-// splits on `|` with no escaping, so a regex bullet's pattern must not
-// contain a literal `|` (no alternation groups); rephrase instead of
-// escaping it.
+// rather than fixed wording ("It's not X. It's Y."). A literal `|` inside
+// the pattern (an alternation group) must be written `\|`, see
+// splitBulletFields above: the bullet-line format is still `|`-delimited,
+// so an unescaped `|` is still a field separator, not part of the pattern.
 export function buildMatcher(rule) {
   if (rule.regex === 'true') return new RegExp(rule.pattern, 'gi');
   const isSingleWord = !rule.pattern.includes(' ');
